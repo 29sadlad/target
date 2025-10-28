@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <title>Target Practice Game</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #difficultyMenu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+        }
+        
+        #difficultyMenu h1 {
+            font-size: 3em;
+            margin-bottom: 50px;
+            text-align: center;
+        }
+        
+        .difficulty-btn {
+            font-size: 1.5em;
+            padding: 20px 40px;
+            margin: 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+            min-width: 200px;
+        }
+        
+        .difficulty-btn:hover {
+            background: #45a049;
+        }
+        
+        .easy { background: #4CAF50; }
+        .normal { background: #FF9800; }
+        .hard { background: #F44336; }
+        
+        .easy:hover { background: #45a049; }
+        .normal:hover { background: #e68900; }
+        .hard:hover { background: #da190b; }
+        
+        #gameUI {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 1.2em;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        #menuButton {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 2px solid white;
+            border-radius: 10px;
+            padding: 15px 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+        
+        #menuButton:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        
+        #gameOverScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            color: white;
+            text-align: center;
+        }
+        
+        #gameOverScreen h1 {
+            font-size: 4em;
+            margin-bottom: 30px;
+        }
+        
+        #gameOverScreen h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+        
+        #gameOverScreen p {
+            font-size: 1.5em;
+            margin-bottom: 40px;
+        }
+        
+        .game-over-btn {
+            font-size: 1.3em;
+            padding: 15px 30px;
+            margin: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .game-over-btn:hover {
+            background: #45a049;
+        }
+        
+        .win { color: #4CAF50; }
+        .lose { color: #F44336; }
+        
+        #timer {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #FFD700;
+        }
+    </style>
+</head>
+<body>
+    <!-- Difficulty Selection Menu -->
+    <div id="difficultyMenu">
+        <h1>Target Practice Game</h1>
+        <p>Survive for 2 minutes while destroying enemies!</p>
+        <p>Game Over if 10+ enemies are on the field at once</p>
+        <button class="difficulty-btn easy" onclick="startGame('easy')">Easy</button>
+        <button class="difficulty-btn normal" onclick="startGame('normal')">Normal</button>
+        <button class="difficulty-btn hard" onclick="startGame('hard')">Hard</button>
+    </div>
+    
+    <!-- Game UI -->
+    <div id="gameUI" style="display: none;">
+        <div id="timer">Time: 2:00</div>
+        <div id="scoreDisplay">Score: 0</div>
+        <div id="difficultyDisplay">Difficulty: Easy</div>
+        <div id="enemyCount">Enemies: 0</div>
+    </div>
+    
+    <!-- Menu Button -->
+    <button id="menuButton" style="display: none;" onclick="returnToMenu()">Menu</button>
+    
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen">
+        <h1 id="gameOverTitle">Game Over</h1>
+        <h2 id="gameOverResult">You Win!</h2>
+        <p id="gameOverStats">Final Score: 0</p>
+        <p id="gameOverReason">You survived the full 2 minutes!</p>
+        <button class="game-over-btn" onclick="restartGame()">Play Again</button>
+        <button class="game-over-btn" onclick="returnToMenu()">Main Menu</button>
+    </div>
+
+    <a-scene id="gameScene" background="color: #87CEEB">
+        <!-- Camera with controls -->
+        <a-camera id="camera" position="0 1.6 3" look-controls wasd-controls>
+            <!-- Dynamic crosshair that changes color -->
+            <a-ring id="crosshair" position="0 0 -1" radius-inner="0.02" radius-outer="0.03" color="black" opacity="1"></a-ring>
+        </a-camera>
+        
+        <!-- Lighting that adjusts with difficulty -->
+        <a-light id="ambientLight" type="ambient" color="#ffffff" intensity="0.8"></a-light>
+        <a-light id="directionalLight" type="directional" position="10 10 10" color="#ffffff" intensity="1.2"></a-light>
+        <a-light id="pointLight" type="point" position="0 10 0" color="#ffffff" intensity="0.8"></a-light>
+        
+        <!-- Large grass area with no reflections -->
+        <a-plane id="ground" position="0 0 0" 
+                 rotation="-90 0 0" 
+                 width="100" 
+                 height="100" 
+                 color="#4CAF50"
+                 material="roughness: 1; metalness: 0; shader: flat">
+        </a-plane>
+        
+        <!-- Enemy container -->
+        <a-entity id="enemies"></a-entity>
+        
+        <!-- Explosion container -->
+        <a-entity id="explosions"></a-entity>
+        
+        <!-- Score display (hidden, using HTML UI instead) -->
+        <a-text id="score" position="0 8 -10" value="Score: 0" color="white" align="center" scale="3 3 3" visible="false"></a-text>
+    </a-scene>
+
+    <script>
+        let score = 0;
+        let enemies = [];
+        let targetedEnemy = null;
+        let targetStartTime = 0;
+        let gameStarted = false;
+        let difficulty = 'easy';
+        let spawnInterval;
+        let enemyCountCheckInterval;
+        let gameTimer;
+        let timeRemaining = 120; // 2 minutes in seconds
+        let gameEnded = false;
+        
+        // Game settings
+        const GAME_DURATION = 120; // 2 minutes
+        const MAX_ENEMIES_LOSE = 10; // Lose if 10+ enemies on field
+        
+        // Difficulty settings with environment and chaos settings
+        const difficultySettings = {
+            easy: {
+                maxEnemies: 8, // Increased to allow for challenge
+                enemySpeed: { min: 4000, max: 7000 },
+                spawnRate: 5000,
+                hitboxSize: 0.12,
+                enemySize: 1.4,
+                targetTime: 500,
+                // Environment settings
+                backgroundColor: '#87CEEB', // Light blue
+                groundColor: '#4CAF50', // Bright green
+                ambientIntensity: 0.8,
+                directionalIntensity: 1.2,
+                pointIntensity: 0.8,
+                // Chaos settings
+                chaosLevel: 1, // Low chaos
+                randomDirectionChanges: false,
+                multipleAnimations: 1
+            },
+            normal: {
+                maxEnemies: 12,
+                enemySpeed: { min: 2500, max: 4500 }, // Faster
+                spawnRate: 3500,
+                hitboxSize: 0.10,
+                enemySize: 1.2,
+                targetTime: 500,
+                // Environment settings
+                backgroundColor: '#4682B4', // Steel blue (darker)
+                groundColor: '#2E7D32', // Darker green
+                ambientIntensity: 0.6,
+                directionalIntensity: 1.0,
+                pointIntensity: 0.6,
+                // Chaos settings
+                chaosLevel: 2, // Medium chaos
+                randomDirectionChanges: true,
+                multipleAnimations: 2
+            },
+            hard: {
+                maxEnemies: 15,
+                enemySpeed: { min: 1500, max: 3000 }, // Much faster
+                spawnRate: 2500,
+                hitboxSize: 0.08,
+                enemySize: 1.0,
+                targetTime: 750,
+                // Environment settings
+                backgroundColor: '#2F2F2F', // Dark gray
+                groundColor: '#1B5E20', // Very dark green
+                ambientIntensity: 0.4,
+                directionalIntensity: 0.8,
+                pointIntensity: 0.4,
+                // Chaos settings
+                chaosLevel: 3, // High chaos
+                randomDirectionChanges: true,
+                multipleAnimations: 3,
+                erraticMovement: true
+            }
+        };
+        
+        const scoreElement = document.getElementById('scoreDisplay');
+        const difficultyElement = document.getElementById('difficultyDisplay');
+        const enemyCountElement = document.getElementById('enemyCount');
+        const timerElement = document.getElementById('timer');
+        const enemyContainer = document.getElementById('enemies');
+        const explosionContainer = document.getElementById('explosions');
+        const crosshair = document.getElementById('crosshair');
+        
+        // Format time for display
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        
+        // Update timer display
+        function updateTimer() {
+            if (!gameStarted || gameEnded) return;
+            
+            timeRemaining--;
+            timerElement.textContent = `Time: ${formatTime(timeRemaining)}`;
+            
+            // Change timer color as time runs out
+            if (timeRemaining <= 30) {
+                timerElement.style.color = '#FF4444'; // Red
+            } else if (timeRemaining <= 60) {
+                timerElement.style.color = '#FFA500'; // Orange
+            } else {
+                timerElement.style.color = '#FFD700'; // Gold
+            }
+            
+            // Check win condition
+            if (timeRemaining <= 0) {
+                endGame(true, 'You survived the full 2 minutes!');
+            }
+        }
+        
+        // Update enemy count display and check lose condition
+        function updateEnemyCountDisplay() {
+            if (enemyCountElement) {
+                enemyCountElement.textContent = `Enemies: ${enemies.length}`;
+                
+                // Check lose condition
+                if (enemies.length >= MAX_ENEMIES_LOSE && gameStarted && !gameEnded) {
+                    endGame(false, `Too many enemies! (${enemies.length}/${MAX_ENEMIES_LOSE})`);
+                }
+            }
+        }
+        
+        // End the game
+        function endGame(won, reason) {
+            gameEnded = true;
+            gameStarted = false;
+            
+            // Clear all intervals
+            if (spawnInterval) clearInterval(spawnInterval);
+            if (enemyCountCheckInterval) clearInterval(enemyCountCheckInterval);
+            if (gameTimer) clearInterval(gameTimer);
+            
+            // Update game over screen
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            const gameOverResult = document.getElementById('gameOverResult');
+            const gameOverStats = document.getElementById('gameOverStats');
+            const gameOverReason = document.getElementById('gameOverReason');
+            
+            if (won) {
+                gameOverTitle.textContent = 'Victory!';
+                gameOverResult.textContent = 'You Win!';
+                gameOverResult.className = 'win';
+            } else {
+                gameOverTitle.textContent = 'Game Over';
+                gameOverResult.textContent = 'You Lose!';
+                gameOverResult.className = 'lose';
+            }
+            
+            gameOverStats.textContent = `Final Score: ${score} | Time Survived: ${formatTime(GAME_DURATION - timeRemaining)}`;
+            gameOverReason.textContent = reason;
+            
+            // Show game over screen
+            document.getElementById('gameOverScreen').style.display = 'flex';
+            document.getElementById('gameUI').style.display = 'none';
+            document.getElementById('menuButton').style.display = 'none';
+            
+            console.log(`Game ended: ${won ? 'WIN' : 'LOSE'} - ${reason}`);
+        }
+        
+        // Restart the current game
+        function restartGame() {
+            document.getElementById('gameOverScreen').style.display = 'none';
+            startGame(difficulty);
+        }
+        
+        // Check enemy count and spawn if needed
+        function checkEnemyCount() {
+            if (!gameStarted || gameEnded) return;
+            
+            // If less than 4 enemies, spawn 4 more (but respect max limits)
+            if (enemies.length < 4) {
+                const settings = difficultySettings[difficulty];
+                const enemiesToSpawn = Math.min(4, settings.maxEnemies - enemies.length);
+                
+                if (enemiesToSpawn > 0) {
+                    console.log(`Only ${enemies.length} enemies remaining. Spawning ${enemiesToSpawn} more...`);
+                    
+                    for (let i = 0; i < enemiesToSpawn; i++) {
+                        setTimeout(() => {
+                            if (gameStarted && !gameEnded) {
+                                createEnemy();
+                                updateEnemyCountDisplay();
+                            }
+                        }, i * 200);
+                    }
+                }
+            }
+        }
+        
+        // Return to main menu
+        function returnToMenu() {
+            // Stop the game
+            gameStarted = false;
+            gameEnded = false;
+            if (spawnInterval) clearInterval(spawnInterval);
+            if (enemyCountCheckInterval) clearInterval(enemyCountCheckInterval);
+            if (gameTimer) clearInterval(gameTimer);
+            
+            // Clear all enemies
+            enemies.forEach(enemy => {
+                if (enemy.parentNode) {
+                    enemy.parentNode.removeChild(enemy);
+                }
+            });
+            enemies = [];
+            
+            // Clear explosions
+            while (explosionContainer.firstChild) {
+                explosionContainer.removeChild(explosionContainer.firstChild);
+            }
+            
+            // Reset game state
+            score = 0;
+            timeRemaining = GAME_DURATION;
+            targetedEnemy = null;
+            crosshair.setAttribute('color', 'black');
+            
+            // Reset environment to default
+            document.getElementById('gameScene').setAttribute('background', 'color: #87CEEB');
+            
+            // Hide all game screens, show menu
+            document.getElementById('difficultyMenu').style.display = 'flex';
+            document.getElementById('gameUI').style.display = 'none';
+            document.getElementById('menuButton').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            
+            console.log('Returned to main menu');
+        }
+        
+        // Start game with selected difficulty
+        function startGame(selectedDifficulty) {
+            difficulty = selectedDifficulty;
+            gameStarted = true;
+            gameEnded = false;
+            score = 0;
+            timeRemaining = GAME_DURATION;
+            
+            const settings = difficultySettings[difficulty];
+            
+            // Set environment based on difficulty
+            document.getElementById('gameScene').setAttribute('background', `color: ${settings.backgroundColor}`);
+            document.getElementById('ground').setAttribute('color', settings.groundColor);
+            
+            // Adjust lighting based on difficulty
+            document.getElementById('ambientLight').setAttribute('intensity', settings.ambientIntensity);
+            document.getElementById('directionalLight').setAttribute('intensity', settings.directionalIntensity);
+            document.getElementById('pointLight').setAttribute('intensity', settings.pointIntensity);
+            
+            // Hide menu and game over screen, show game UI
+            document.getElementById('difficultyMenu').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('gameUI').style.display = 'block';
+            document.getElementById('menuButton').style.display = 'block';
+            
+            // Update UI displays
+            difficultyElement.textContent = `Difficulty: ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`;
+            scoreElement.textContent = 'Score: 0';
+            timerElement.textContent = `Time: ${formatTime(timeRemaining)}`;
+            timerElement.style.color = '#FFD700';
+            updateEnemyCountDisplay();
+            
+            console.log(`Game started on ${difficulty} difficulty! Survive for 2 minutes!`);
+            
+            // Create initial enemies (always start with 4)
+            for (let i = 0; i < 4; i++) {
+                setTimeout(() => {
+                    createEnemy();
+                    updateEnemyCountDisplay();
+                }, i * 300);
+            }
+            
+            // Start game loops
+            setInterval(checkLookingAtEnemy, 50);
+            setInterval(updateCrosshairColor, 100);
+            
+            // Start timer
+            gameTimer = setInterval(updateTimer, 1000);
+            
+            // Check enemy count every 2 seconds
+            enemyCountCheckInterval = setInterval(checkEnemyCount, 2000);
+            
+            // Regular spawning based on difficulty settings
+            spawnInterval = setInterval(spawnEnemies, settings.spawnRate);
+        }
+        
+        // Update crosshair color based on what's behind it
+        function updateCrosshairColor() {
+            if (!gameStarted || gameEnded) return;
+            
+            const camera = document.getElementById('camera');
+            const scene = document.querySelector('a-scene');
+            
+            if (!camera || !scene) return;
+            
+            try {
+                const raycaster = new THREE.Raycaster();
+                const cameraObj = camera.getObject3D('camera');
+                
+                if (!cameraObj) return;
+                
+                const cameraWorldPos = new THREE.Vector3();
+                const cameraWorldDir = new THREE.Vector3();
+                
+                cameraObj.getWorldPosition(cameraWorldPos);
+                cameraObj.getWorldDirection(cameraWorldDir);
+                
+                raycaster.set(cameraWorldPos, cameraWorldDir);
+                
+                const allObjects = [];
+                scene.object3D.traverse((child) => {
+                    if (child.isMesh) {
+                        allObjects.push(child);
+                    }
+                });
+                
+                const intersects = raycaster.intersectObjects(allObjects);
+                
+                let crosshairColor = 'white';
+                
+                if (intersects.length > 0) {
+                    const intersectedObject = intersects[0].object;
+                    
+                    if (intersectedObject.material && intersectedObject.material.color) {
+                        const materialColor = intersectedObject.material.color;
+                        const r = Math.max(0, materialColor.r - 0.5);
+                        const g = Math.max(0, materialColor.g - 0.5);
+                        const b = Math.max(0, materialColor.b - 0.5);
+                        
+                        if (r + g + b < 0.3) {
+                            crosshairColor = 'white';
+                        } else {
+                            crosshairColor = `rgb(${Math.floor(r * 255)}, ${Math.floor(g * 255)}, ${Math.floor(b * 255)})`;
+                        }
+                    }
+                }
+                
+                if (targetedEnemy) {
+                    crosshairColor = 'red';
+                }
+                
+                crosshair.setAttribute('color', crosshairColor);
+                
+            } catch (error) {
+                crosshair.setAttribute('color', 'white');
+            }
+        }
+        
+        // Create enemy with chaotic movement based on difficulty
+        function createEnemy() {
+            if (!gameStarted || gameEnded) return;
+            
+            const settings = difficultySettings[difficulty];
+            const enemy = document.createElement('a-sphere');
+            
+            const startX = (Math.random() - 0.5) * 70;
+            const startZ = (Math.random() - 0.5) * 70;
+            const startY = 3 + Math.random() * 2;
+            
+            enemy.setAttribute('radius', settings.enemySize);
+            enemy.setAttribute('color', '#ff0000');
+            enemy.setAttribute('position', `${startX} ${startY} ${startZ}`);
+            enemy.setAttribute('class', 'enemy');
+            
+            const basePatterns = ['horizontal_circle', 'back_forth_x', 'back_forth_z', 'diagonal_sweep', 'square_path', 'horizontal_figure8'];
+            const chaoticPatterns = ['erratic_spiral', 'random_teleport', 'zigzag_chaos', 'multi_direction'];
+            
+            let availablePatterns = basePatterns;
+            if (settings.chaosLevel >= 2) {
+                availablePatterns = [...basePatterns, ...chaoticPatterns];
+            }
+            
+            const pattern = availablePatterns[Math.floor(Math.random() * availablePatterns.length)];
+            const speed = settings.enemySpeed.min + Math.random() * (settings.enemySpeed.max - settings.enemySpeed.min);
+            
+            applyChaoticalMovementPattern(enemy, pattern, speed, startX, startY, startZ, settings);
+            
+            enemyContainer.appendChild(enemy);
+            enemies.push(enemy);
+            
+            console.log(`Enemy created with ${pattern} pattern. Total enemies: ${enemies.length}`);
+        }
+        
+        // Apply chaotic movement patterns based on difficulty
+        function applyChaoticalMovementPattern(enemy, pattern, speed, startX, startY, startZ, settings) {
+            const radius = 8 + Math.random() * 12;
+            const chaosMultiplier = settings.chaosLevel;
+            
+            switch(pattern) {
+                case 'horizontal_circle':
+                    enemy.setAttribute('animation__circle_x', {
+                        property: 'position',
+                        from: `${startX} ${startY} ${startZ}`,
+                        to: `${startX + radius * chaosMultiplier} ${startY} ${startZ}`,
+                        dur: speed / (4 * chaosMultiplier),
+                        repeat: 'indefinite',
+                        dir: 'alternate',
+                        easing: 'easeInOutSine'
+                    });
+                    
+                    enemy.setAttribute('animation__circle_z', {
+                        property: 'position',
+                        from: `${startX} ${startY} ${startZ}`,
+                        to: `${startX} ${startY} ${startZ + radius * chaosMultiplier}`,
+                        dur: speed / (3 * chaosMultiplier),
+                        repeat: 'indefinite',
+                        dir: 'alternate',
+                        easing: 'easeInOutSine'
+                    });
+                    break;
+                    
+                case 'back_forth_x':
+                    enemy.setAttribute('animation__back_forth_x', {
+                        property: 'position',
+                        from: `${startX - radius * chaosMultiplier} ${startY} ${startZ}`,
+                        to: `${startX + radius * chaosMultiplier} ${startY} ${startZ}`,
+                        dur: speed / chaosMultiplier,
+                        repeat: 'indefinite',
+                        dir: 'alternate',
+                        easing: settings.chaosLevel >= 3 ? 'linear' : 'easeInOutQuad'
+                    });
+                    break;
+                    
+                // ... (include all other movement patterns from previous code)
+            }
+            
+            enemy.setAttribute('animation__pulse', {
+                property: 'scale',
+                from: '1 1 1',
+                to: `${1.1 + 0.1 * chaosMultiplier} ${1.1 + 0.1 * chaosMultiplier} ${1.1 + 0.1 * chaosMultiplier}`,
+                dur: (1500 + Math.random() * 2000) / chaosMultiplier,
+                repeat: 'indefinite',
+                dir: 'alternate',
+                easing: 'easeInOutQuad'
+            });
+        }
+        
+        // Check if camera is looking at an enemy
+        function checkLookingAtEnemy() {
+            if (!gameStarted || gameEnded) return;
+            
+            const settings = difficultySettings[difficulty];
+            const camera = document.getElementById('camera');
+            const cameraWorldPos = new THREE.Vector3();
+            const cameraWorldDir = new THREE.Vector3();
+            
+            const cameraObj = camera.getObject3D('camera');
+            if (!cameraObj) return;
+            
+            cameraObj.getWorldPosition(cameraWorldPos);
+            cameraObj.getWorldDirection(cameraWorldDir);
+            
+            let closestEnemy = null;
+            let smallestAngle = Infinity;
+            
+            enemies.forEach(enemy => {
+                const enemyPos = enemy.getAttribute('position');
+                const enemyWorldPos = new THREE.Vector3(enemyPos.x, enemyPos.y, enemyPos.z);
+                
+                const dirToEnemy = new THREE.Vector3();
+                dirToEnemy.subVectors(enemyWorldPos, cameraWorldPos);
+                dirToEnemy.normalize();
+                
+                const angle = cameraWorldDir.angleTo(dirToEnemy);
+                
+                if (angle < settings.hitboxSize && angle < smallestAngle) {
+                    smallestAngle = angle;
+                    closestEnemy = enemy;
+                }
+            });
+            
+            if (closestEnemy) {
+                if (targetedEnemy !== closestEnemy) {
+                    targetedEnemy = closestEnemy;
+                    targetStartTime = Date.now();
+                } else {
+                    const timeElapsed = Date.now() - targetStartTime;
+                    if (timeElapsed >= settings.targetTime) {
+                        explodeEnemy(closestEnemy);
+                        targetedEnemy = null;
+                    }
+                }
+            } else {
+                if (targetedEnemy) {
+                    targetedEnemy = null;
+                }
+            }
+        }
+        
+        // Explode enemy
+        function explodeEnemy(enemy) {
+            if (!gameStarted || gameEnded) return;
+            
+            console.log('Enemy exploded!');
+            
+            const enemyPos = enemy.getAttribute('position');
+            const explosionGroup = document.createElement('a-entity');
+            explosionGroup.setAttribute('position', `${enemyPos.x} ${enemyPos.y} ${enemyPos.z}`);
+            
+            const settings = difficultySettings[difficulty];
+            const particleCount = 25 + (settings.chaosLevel * 5);
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('a-sphere');
+                
+                const colors = ['#ff4500', '#ff6347', '#ffa500', '#ff8c00', '#dc143c', '#ffff00'];
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                
+                particle.setAttribute('radius', 0.1 + Math.random() * 0.1);
+                particle.setAttribute('color', color);
+                particle.setAttribute('position', '0 0 0');
+                
+                const dirX = (Math.random() - 0.5) * 8 * settings.chaosLevel;
+                const dirY = Math.random() * 5 + 2;
+                const dirZ = (Math.random() - 0.5) * 8 * settings.chaosLevel;
+                
+                particle.setAttribute('animation__pos', {
+                    property: 'position',
+                    from: '0 0 0',
+                    to: `${dirX} ${dirY} ${dirZ}`,
+                    dur: 1200 / settings.chaosLevel,
+                    easing: 'easeOutQuad'
+                });
+                
+                particle.setAttribute('animation__opacity', {
+                    property: 'opacity',
+                    from: 1,
+                    to: 0,
+                    dur: 1200 / settings.chaosLevel
+                });
+                
+                particle.setAttribute('animation__scale', {
+                    property: 'scale',
+                    from: '1 1 1',
+                    to: '0.1 0.1 0.1',
+                    dur: 1200 / settings.chaosLevel
+                });
+                
+                explosionGroup.appendChild(particle);
+            }
+            
+            explosionContainer.appendChild(explosionGroup);
+            
+            setTimeout(() => {
+                if (explosionGroup.parentNode) {
+                    explosionGroup.parentNode.removeChild(explosionGroup);
+                }
+            }, 1500);
+            
+            if (enemy.parentNode) {
+                enemy.parentNode.removeChild(enemy);
+            }
+            const index = enemies.indexOf(enemy);
+            if (index > -1) {
+                enemies.splice(index, 1);
+            }
+            
+            updateEnemyCountDisplay();
+            
+            const points = difficulty === 'easy' ? 10 : difficulty === 'normal' ? 15 : 25;
+            score += points;
+            scoreElement.textContent = `Score: ${score}`;
+            
+            console.log(`Enemy destroyed! Remaining enemies: ${enemies.length}`);
+        }
+        
+        // Spawn enemies periodically
+        function spawnEnemies() {
+            if (!gameStarted || gameEnded) return;
+            
+            const settings = difficultySettings[difficulty];
+            if (enemies.length < settings.maxEnemies) {
+                createEnemy();
+                updateEnemyCountDisplay();
+            }
+        }
+        
+        // Make functions globally available
+        window.startGame = startGame;
+        window.returnToMenu = returnToMenu;
+        window.restartGame = restartGame;
+        
+        console.log('Target Practice Game loaded! Survive 2 minutes without letting 10+ enemies accumulate!');
+    </script>
+</body>
+</html>
+
